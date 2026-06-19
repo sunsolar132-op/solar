@@ -14,3 +14,4 @@ yarn-error.log*
 *.json
 !package.json
 !package-lock.json
+!vercel.json
