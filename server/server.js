@@ -14,7 +14,11 @@ app.use(cors({
     // Allow localhost dev servers (any port, e.g. 5173, 5174, etc.)
     if (/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return callback(null, true);
     // Allow any device on the local network (192.168.x.x or 10.x.x.x or 172.x.x.x)
-    if (/^http:\/\/(192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)[\d.]+:\d+$/.test(origin)) return callback(null, true);
+    if (/^http:\/\/(192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)[\\d.]+:\d+$/.test(origin)) return callback(null, true);
+    // Allow Vercel deployments (*.vercel.app) and custom domain from env
+    if (/^https:\/\/.*\.vercel\.app$/.test(origin)) return callback(null, true);
+    const allowed = process.env.ALLOWED_ORIGIN;
+    if (allowed && origin === allowed) return callback(null, true);
     callback(new Error(`CORS blocked: ${origin}`));
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
