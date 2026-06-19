@@ -1,4 +1,5 @@
-const BASE_URL = '/api';
+const API_URL = import.meta.env.VITE_API_URL || '';
+const BASE_URL = `${API_URL.replace(/\/$/, '')}/api`;
 
 const getHeaders = () => {
   // Read token from sessionStorage so each tab uses its own independent session
