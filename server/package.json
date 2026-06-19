@@ -1,0 +1,29 @@
+{
+  "name": "server",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "node --watch server.js",
+    "migrate:supabase": "node scripts/migrate-firestore-to-supabase.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.0",
+    "express": "^5.2.1",
+    "firebase-admin": "^13.8.0",
+    "googleapis": "^173.0.0",
+    "jsonwebtoken": "^9.0.3",
+    "nodemailer": "^8.0.10",
+    "pg": "^8.20.0",
+    "pg-hstore": "^2.3.4",
+    "sequelize": "^6.37.8",
+    "sqlite3": "^6.0.1"
+  }
+}

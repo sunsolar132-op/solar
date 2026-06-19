@@ -1,0 +1,16 @@
+node_modules/
+.env
+.env.*
+!.env.example
+WMS_Backups/
+dist/
+build/
+.DS_Store
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Firebase admin SDK private key (never push this!)
+*.json
+!package.json
+!package-lock.json
