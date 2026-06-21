@@ -1,13 +1,9 @@
-import { useEffect, useRef, useState, Suspense, lazy } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import { useToast } from './context/ToastContext';
 import api from './api';
 import './LoginPage.css';
-
-const Spline = lazy(() => import('@splinetool/react-spline'));
-
-const SPLINE_URL = 'https://prod.spline.design/io14twxTxeuzLQBf/scene.splinecode';
 
 // ─── SVG ICONS ────────────────────────────────────────────────────────────────
 
@@ -63,58 +59,8 @@ export default function Login() {
   const { login } = useAuth();
   const { addToast } = useToast();
   const navigate = useNavigate();
-  
-  const glowRef = useRef(null);
-  const containerRef = useRef(null);
 
-  // ─── HIDE SPLINE TEXT OBJECTS PROGRAMMATICALLY ──────────────────────────
-  const handleSplineLoad = (spline) => {
-    // Hide all objects that might be text
-    const objects = spline.getAllObjects();
-    objects.forEach(obj => {
-      const name = (obj.name || '').toLowerCase();
-      if (
-        name.includes('text') || 
-        name.includes('chasing') || 
-        name.includes('sunsets') ||
-        name.includes('title') ||
-        name.includes('paragraph')
-      ) {
-        obj.visible = false;
-        // Also try to move them far away just in case visible=false isn't enough
-        if (obj.position) {
-          obj.position.x = -999999;
-        }
-      }
-    });
-  };
 
-  // ─── HIGH-PERFORMANCE CURSOR TRACKING (SYNCED) ───────────────────────────
-  useEffect(() => {
-    let mouseX = -9999;
-    let mouseY = -9999;
-
-    const handleMouseMove = (e) => {
-      mouseX = e.clientX;
-      mouseY = e.clientY;
-    };
-
-    const updateGlow = () => {
-      if (glowRef.current) {
-        // Use translate3d for best performance and exact cursor alignment
-        glowRef.current.style.transform = `translate3d(${mouseX}px, ${mouseY}px, 0) translate(-50%, -50%)`;
-      }
-      requestAnimationFrame(updateGlow);
-    };
-
-    window.addEventListener('mousemove', handleMouseMove, { passive: true });
-    const animationFrame = requestAnimationFrame(updateGlow);
-
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      cancelAnimationFrame(animationFrame);
-    };
-  }, []);
 
   // ─── FORM HANDLERS ─────────────────────────────────────────────────────────
   const handleSubmit = async (e) => {
@@ -133,27 +79,7 @@ export default function Login() {
   };
 
   return (
-    <div className="login-page" ref={containerRef}>
-
-      {/* ── AMBIENT ORBS ─────────────────── */}
-      <div className="ambient-orb orb-1" />
-      <div className="ambient-orb orb-2" />
-
-      {/* ── CURSOR ORANGE GLOW (Lag-free) ── */}
-      <div
-        ref={glowRef}
-        className="cursor-glow"
-      />
-
-      {/* ── SPLINE 3D BACKGROUND (Centered) ── */}
-      <div className="spline-container centered-spline">
-        <Suspense fallback={null}>
-          <Spline 
-            scene={SPLINE_URL} 
-            onLoad={handleSplineLoad}
-          />
-        </Suspense>
-      </div>
+    <div className="login-page">
 
       {/* ── PAGE LAYOUT (Centered) ────────── */}
       <div className="login-layout centered-layout">
