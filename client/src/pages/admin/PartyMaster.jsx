@@ -14,6 +14,7 @@ export default function PartyMaster() {
   const [allAgents, setAllAgents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('ALL'); // 'ALL' | 'SALE' | 'PURCHASE'
   
   // Form State
   const [showForm, setShowForm] = useState(false);
@@ -123,10 +124,15 @@ export default function PartyMaster() {
     }
   };
 
-  const filteredParties = parties.filter(p => 
-    p.name.toLowerCase().includes(search.toLowerCase()) || 
-    p.gstNumber.toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredParties = parties.filter(p => {
+    const matchSearch = p.name.toLowerCase().includes(search.toLowerCase()) || 
+      p.gstNumber.toLowerCase().includes(search.toLowerCase());
+    const matchCategory = categoryFilter === 'ALL' || (p.category || 'SALE') === categoryFilter;
+    return matchSearch && matchCategory;
+  });
+
+  const saleCount = parties.filter(p => (p.category || 'SALE') === 'SALE').length;
+  const purchaseCount = parties.filter(p => p.category === 'PURCHASE').length;
 
   return (
     <div className="space-y-10 animate-in fade-in duration-700">
@@ -151,9 +157,10 @@ export default function PartyMaster() {
         </button>
       </div>
 
-      {/* Search & Stats */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        <div className="lg:col-span-3 relative">
+      {/* Search & Filter Buttons */}
+      <div className="flex flex-col lg:flex-row gap-6 items-center">
+        {/* Search Bar */}
+        <div className="relative flex-1 w-full">
           <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300" size={20} />
           <input 
             className="w-full pl-16 pr-8 py-5 bg-white rounded-[2.5rem] border border-slate-100 outline-none focus:border-blue-600 text-sm font-bold shadow-sm transition-all"
@@ -162,9 +169,39 @@ export default function PartyMaster() {
             onChange={e => setSearch(e.target.value)}
           />
         </div>
-        <div className="bg-blue-600 rounded-[2.5rem] p-5 flex items-center justify-center gap-4 shadow-xl shadow-blue-100">
-          <div className="text-white text-3xl font-black">{parties.length}</div>
-          <div className="text-blue-100 text-[10px] font-black uppercase tracking-widest leading-tight">Total Central<br/>Identities</div>
+
+        {/* Sale / Purchase Filter Buttons */}
+        <div className="flex gap-3 shrink-0">
+          <button
+            onClick={() => setCategoryFilter('ALL')}
+            className={`flex items-center justify-center h-[60px] gap-2 px-6 rounded-[2rem] font-black text-sm tracking-wide border transition-all ${
+              categoryFilter === 'ALL'
+                ? 'bg-slate-900 text-white border-slate-900 shadow-xl shadow-slate-200'
+                : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'
+            }`}
+          >
+            All &nbsp;<span className="bg-black/20 px-2.5 py-1 rounded-full text-[11px] font-bold">{parties.length}</span>
+          </button>
+          <button
+            onClick={() => setCategoryFilter('SALE')}
+            className={`flex items-center justify-center h-[60px] gap-2 px-6 rounded-[2rem] font-black text-sm tracking-wide border transition-all ${
+              categoryFilter === 'SALE'
+                ? 'bg-emerald-600 text-white border-emerald-600 shadow-xl shadow-emerald-100'
+                : 'bg-white text-slate-600 border-slate-200 hover:border-emerald-200 hover:text-emerald-700'
+            }`}
+          >
+            Sale &nbsp;<span className={`px-2.5 py-1 rounded-full text-[11px] font-bold ${ categoryFilter === 'SALE' ? 'bg-black/20' : 'bg-emerald-100 text-emerald-700'}`}>{saleCount}</span>
+          </button>
+          <button
+            onClick={() => setCategoryFilter('PURCHASE')}
+            className={`flex items-center justify-center h-[60px] gap-2 px-6 rounded-[2rem] font-black text-sm tracking-wide border transition-all ${
+              categoryFilter === 'PURCHASE'
+                ? 'bg-amber-500 text-white border-amber-500 shadow-xl shadow-amber-100'
+                : 'bg-white text-slate-600 border-slate-200 hover:border-amber-200 hover:text-amber-700'
+            }`}
+          >
+            Purchase &nbsp;<span className={`px-2.5 py-1 rounded-full text-[11px] font-bold ${ categoryFilter === 'PURCHASE' ? 'bg-black/20' : 'bg-amber-100 text-amber-700'}`}>{purchaseCount}</span>
+          </button>
         </div>
       </div>
 
