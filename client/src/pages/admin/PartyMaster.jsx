@@ -24,6 +24,8 @@ export default function PartyMaster() {
   // Access Control State
   const [accessTarget, setAccessTarget] = useState(null); // { id, name, type: 'FIRM' | 'AGENT' }
   const [selectedAccess, setSelectedAccess] = useState([]); // Array of IDs
+  const [isLoadingAccess, setIsLoadingAccess] = useState(false);
+  const [isSavingAccess, setIsSavingAccess] = useState(false);
 
   const fetchData = async () => {
     setLoading(true);
@@ -101,32 +103,43 @@ export default function PartyMaster() {
   };
 
   const openAccessModal = async (party, type) => {
+    // Prevent opening if already loading access data
+    if (isLoadingAccess) return;
+    setSelectedAccess([]);
     setAccessTarget({ ...party, type });
+    setIsLoadingAccess(true);
     try {
       const endpoint = type === 'FIRM' ? `/admin/parties/${party.id}/firms` : `/admin/parties/${party.id}/agents`;
       const currentAccess = await api.get(endpoint);
       setSelectedAccess(currentAccess);
     } catch {
       addToast('Access fetch failed', 'error');
+      setAccessTarget(null);
+    } finally {
+      setIsLoadingAccess(false);
     }
   };
 
   const handleSaveAccess = async () => {
-    if (!accessTarget) return;
+    if (!accessTarget || isSavingAccess) return;
+    setIsSavingAccess(true);
     try {
       const endpoint = accessTarget.type === 'FIRM' ? `/admin/parties/${accessTarget.id}/firms` : `/admin/parties/${accessTarget.id}/agents`;
       const payload = accessTarget.type === 'FIRM' ? { firmIds: selectedAccess } : { agentIds: selectedAccess };
       await api.put(endpoint, payload);
       addToast('Access protocols synchronized');
       setAccessTarget(null);
+      setSelectedAccess([]);
     } catch {
       addToast('Sync failure', 'error');
+    } finally {
+      setIsSavingAccess(false);
     }
   };
 
   const filteredParties = parties.filter(p => {
     const matchSearch = p.name.toLowerCase().includes(search.toLowerCase()) || 
-      p.gstNumber.toLowerCase().includes(search.toLowerCase());
+      (p.gstNumber || '').toLowerCase().includes(search.toLowerCase());
     const matchCategory = categoryFilter === 'ALL' || (p.category || 'SALE') === categoryFilter;
     return matchSearch && matchCategory;
   });
@@ -260,7 +273,8 @@ export default function PartyMaster() {
                 <div className="flex gap-2 mr-2 lg:mr-4 border-r border-slate-50 pr-2 lg:pr-4">
                   <button 
                     onClick={() => openAccessModal(p, 'FIRM')}
-                    className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-slate-50 border border-slate-100 hover:bg-blue-50 hover:border-blue-100 transition-all group/btn"
+                    disabled={isLoadingAccess}
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-slate-50 border border-slate-100 hover:bg-blue-50 hover:border-blue-100 transition-all group/btn disabled:opacity-50 disabled:cursor-not-allowed"
                     title="Firm Access"
                   >
                     <ShieldCheck size={16} className="text-slate-300 group-hover/btn:text-blue-600" />
@@ -268,7 +282,8 @@ export default function PartyMaster() {
                   </button>
                   <button 
                     onClick={() => openAccessModal(p, 'AGENT')}
-                    className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-slate-50 border border-slate-100 hover:bg-amber-50 hover:border-amber-100 transition-all group/btn"
+                    disabled={isLoadingAccess}
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-slate-50 border border-slate-100 hover:bg-amber-50 hover:border-amber-100 transition-all group/btn disabled:opacity-50 disabled:cursor-not-allowed"
                     title="Agent Access"
                   >
                     <UserCheck size={16} className="text-slate-300 group-hover/btn:text-amber-600" />
@@ -404,7 +419,12 @@ export default function PartyMaster() {
             </div>
             
             <div className="p-10 overflow-y-auto scrollbar-hide space-y-3">
-              {accessTarget.type === 'FIRM' ? (
+              {isLoadingAccess ? (
+                <div className="flex flex-col items-center justify-center py-16 gap-4">
+                  <div className="w-10 h-10 border-4 border-slate-100 border-t-blue-600 rounded-full animate-spin" />
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Fetching Access Data...</p>
+                </div>
+              ) : accessTarget.type === 'FIRM' ? (
                 firms.map(f => {
                   const isSelected = selectedAccess.includes(f.id);
                   return (
@@ -430,11 +450,6 @@ export default function PartyMaster() {
                 })
               ) : (
                 allAgents.map(a => {
-                  // Only show agents of firms that HAVE access to this party
-                  // (Wait, the user said "show agents of selected firms only")
-                  // Since we don't have the party's current firm access here easily without another state,
-                  // we'll just let admin select ANY agent, but the rule says "only selected agents of those firms can see it".
-                  // Let's filter by current state selectedAccess is not possible easily, let's just show all and admin picks.
                   const isSelected = selectedAccess.includes(a.id);
                   return (
                     <div 
@@ -463,10 +478,13 @@ export default function PartyMaster() {
             <div className="p-10 bg-slate-50 border-t border-slate-100 shrink-0">
               <button 
                 onClick={handleSaveAccess}
-                className={`w-full py-5 rounded-3xl font-black text-xs uppercase tracking-widest transition-all shadow-xl flex items-center justify-center gap-3 ${accessTarget.type === 'FIRM' ? 'bg-blue-600 text-white shadow-blue-100 hover:bg-blue-700' : 'bg-amber-500 text-white shadow-amber-100 hover:bg-amber-600'}`}
+                disabled={isSavingAccess || isLoadingAccess}
+                className={`w-full py-5 rounded-3xl font-black text-xs uppercase tracking-widest transition-all shadow-xl flex items-center justify-center gap-3 disabled:opacity-60 disabled:cursor-not-allowed ${accessTarget.type === 'FIRM' ? 'bg-blue-600 text-white shadow-blue-100 hover:bg-blue-700' : 'bg-amber-500 text-white shadow-amber-100 hover:bg-amber-600'}`}
               >
-                <Save size={18} />
-                <span>Save Access Matrix</span>
+                {isSavingAccess
+                  ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  : <Save size={18} />}
+                <span>{isSavingAccess ? 'Saving...' : 'Save Access Matrix'}</span>
               </button>
             </div>
           </div>

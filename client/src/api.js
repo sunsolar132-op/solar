@@ -47,22 +47,20 @@ const api = {
   },
 
   async get(path) {
-    if (cache[path]) return cache[path];
+    // Only cache fully resolved data — never cache Promises or errors
+    if (cache[path] !== undefined) return cache[path];
     
-    const requestPromise = (async () => {
-      try {
-        const res = await fetch(`${BASE_URL}${path}`, {
-          headers: getHeaders(),
-        });
-        return await handleResponse(res);
-      } catch (err) {
-        delete cache[path]; // Don't cache errors
-        throw err;
-      }
-    })();
-    
-    cache[path] = requestPromise;
-    return requestPromise;
+    try {
+      const res = await fetch(`${BASE_URL}${path}`, {
+        headers: getHeaders(),
+      });
+      const data = await handleResponse(res);
+      cache[path] = data; // Cache the resolved value only
+      return data;
+    } catch (err) {
+      delete cache[path]; // Never cache failures
+      throw err;
+    }
   },
 
   async put(path, body) {

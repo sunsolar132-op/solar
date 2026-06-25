@@ -52,6 +52,46 @@ function mergeProductSwaps(changes) {
   return [...rest, ...merged];
 }
 
+function groupIntoSessions(logs) {
+  if (!logs.length) return [];
+
+  const sessions = [];
+  let current = null;
+
+  for (const log of logs) {
+    const ts = new Date(log.changedAt).getTime();
+
+    if (
+      current &&
+      log.changedById === current.changedById &&
+      Math.abs(ts - current.latestTs) <= 3000
+    ) {
+      current.changes.push(log);
+      current.latestTs = ts;
+    } else {
+      current = {
+        key: log.id,
+        changedAt: log.changedAt,
+        changedById: log.changedById,
+        changedByName: log.changedByName,
+        changedByRole: log.changedByRole,
+        latestTs: ts,
+        changes: [log],
+      };
+      sessions.push(current);
+    }
+  }
+
+  return sessions
+    .map(s => ({
+      ...s,
+      changes: mergeProductSwaps(
+        s.changes.filter(c => c.fieldName === 'Entry Created' || isRealChange(c))
+      ),
+    }))
+    .filter(s => s.changes.length > 0);
+}
+
 
 export default function EntryHistoryModal({ entry, userRole, onClose }) {
   const [sessions, setSessions] = useState([]);
@@ -81,6 +121,7 @@ export default function EntryHistoryModal({ entry, userRole, onClose }) {
 
   // ── Group logs into "edit sessions" ────────────────────────────────────────
   // Logs within 3 seconds of each other by the same person = same session.
+  /*
   function groupIntoSessions(logs) {
     if (!logs.length) return [];
 
@@ -126,6 +167,7 @@ export default function EntryHistoryModal({ entry, userRole, onClose }) {
       .filter(s => s.changes.length > 0);
   }
 
+  */
   const toggle = (key) => setOpen(prev => ({ ...prev, [key]: !prev[key] }));
 
   // ── Formatting helpers ──────────────────────────────────────────────────────

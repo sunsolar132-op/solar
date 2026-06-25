@@ -11,15 +11,18 @@ export default function AccessCredentials() {
   const [form, setForm] = useState(EMPTY);
   const [editId, setEditId] = useState(null);
   const [showModal, setShowModal] = useState(false);
-  
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [visiblePass, setVisiblePass] = useState({});
 
-  const fetch = async () => {
+  const loadFirms = async () => {
+    setLoading(true);
     try { setFirms(await api.get('/admin/firms')); }
     catch (e) { addToast(e.message, 'error'); }
+    finally { setLoading(false); }
   };
 
-  useEffect(() => { fetch(); }, []);
+  useEffect(() => { loadFirms(); }, []);
 
   const openAdd = () => { setForm(EMPTY); setEditId(null); setShowModal(true); };
   const openEdit = (f) => { 
@@ -36,6 +39,8 @@ export default function AccessCredentials() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (saving) return;
+    setSaving(true);
     try {
       if (editId) { 
         await api.put(`/admin/firms/${editId}`, form); 
@@ -46,8 +51,9 @@ export default function AccessCredentials() {
         addToast('New Firm Profile Created!'); 
       }
       setShowModal(false); 
-      fetch();
+      loadFirms();
     } catch (err) { addToast(err.message, 'error'); }
+    finally { setSaving(false); }
   };
 
   const handleDelete = async (id) => {
@@ -55,7 +61,7 @@ export default function AccessCredentials() {
     try { 
       await api.delete(`/admin/firms/${id}`); 
       addToast('Firm profile deleted.'); 
-      fetch(); 
+      loadFirms(); 
     } catch (e) { addToast(e.message, 'error'); }
   };
 
@@ -113,7 +119,19 @@ export default function AccessCredentials() {
               </tr>
             </thead>
             <tbody>
-              {firms.map((f, i) => (
+              {loading ? (
+                [1,2,3].map(n => (
+                  <tr key={n}>
+                    <td className="pl-8"><div className="h-4 w-6 bg-slate-100 rounded animate-pulse" /></td>
+                    <td><div className="h-4 w-40 bg-slate-100 rounded animate-pulse" /></td>
+                    <td><div className="h-4 w-48 bg-slate-100 rounded animate-pulse" /></td>
+                    <td><div className="h-4 w-24 bg-slate-100 rounded animate-pulse" /></td>
+                    <td><div className="h-4 w-20 bg-slate-100 rounded animate-pulse" /></td>
+                    <td><div className="h-4 w-28 bg-slate-100 rounded animate-pulse" /></td>
+                    <td className="pr-8"><div className="h-8 w-20 bg-slate-100 rounded animate-pulse ml-auto" /></td>
+                  </tr>
+                ))
+              ) : firms.map((f, i) => (
                 <tr key={f.id} className="group">
                   <td className="pl-8 text-slate-400 font-bold">{i + 1}</td>
                   <td>
@@ -282,10 +300,11 @@ export default function AccessCredentials() {
 
               {/* Modal Actions */}
               <div className="flex items-center justify-end gap-4 pt-6 border-t border-slate-50">
-                <button type="button" className="btn-secondary" onClick={() => setShowModal(false)}>
+                <button type="button" className="btn-secondary" onClick={() => setShowModal(false)} disabled={saving}>
                   Cancel Operation
                 </button>
-                <button type="submit" className="btn-primary shadow-xl shadow-blue-100">
+                <button type="submit" className="btn-primary shadow-xl shadow-blue-100 flex items-center gap-3" disabled={saving}>
+                  {saving && <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
                   {editId ? 'Commit Changes' : 'Execute Registration'}
                 </button>
               </div>

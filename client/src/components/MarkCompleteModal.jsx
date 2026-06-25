@@ -1,7 +1,11 @@
-import { useState, useEffect } from 'react';
-import { X, Truck, CheckCircle2, ChevronRight, ArrowLeft, Package, User, Phone, Hash, Info, AlertCircle, Plus, Trash2 } from 'lucide-react';
+import { createElement, useState, useEffect, useMemo } from 'react';
+import { X, Truck, CheckCircle2, ChevronRight, ArrowLeft, User, Phone, Hash, Info, AlertCircle, Plus, Trash2 } from 'lucide-react';
 import api from '../api';
 import { useToast } from '../context/ToastContext';
+
+function uid() {
+  return Math.random().toString(36).substr(2, 9);
+}
 
 export default function MarkCompleteModal({ entry, onClose, onSuccess, editMode = false }) {
   const [step, setStep] = useState(1);
@@ -16,13 +20,14 @@ export default function MarkCompleteModal({ entry, onClose, onSuccess, editMode 
   const [deliveryMap, setDeliveryMap] = useState({});
   const [allProducts, setAllProducts] = useState([]);
   const { addToast } = useToast();
+  const entryItems = useMemo(() => Array.isArray(entry?.items) ? entry.items : [], [entry]);
 
   useEffect(() => {
     let cancelled = false;
 
     const buildDefaultMap = () => {
       const initial = {};
-      entry.items.forEach(it => {
+      entryItems.forEach(it => {
         initial[it.productId] = [{
           rowId: uid(),
           deliveredProductId: it.productId,
@@ -38,7 +43,7 @@ export default function MarkCompleteModal({ entry, onClose, onSuccess, editMode 
       try {
         const products = await api.get('/products');
         if (cancelled) return;
-        setAllProducts(products);
+        setAllProducts(Array.isArray(products) ? products : []);
 
         if (editMode && entry.deliveryStatus === 'Completed') {
           const outwardRows = await api.get(`/firm/outward-details/${entry.id}`);
@@ -79,19 +84,15 @@ export default function MarkCompleteModal({ entry, onClose, onSuccess, editMode 
 
     loadInitialData();
     return () => { cancelled = true; };
-  }, [entry, editMode]);
-
-  function uid() {
-    return Math.random().toString(36).substr(2, 9);
-  }
+  }, [entry, editMode, addToast, entryItems]);
 
   // ── Delivery row helpers ──────────────────────────────────────────────────
   const addRow = (originalProductId) => {
-    const billItem = entry.items.find(i => i.productId === originalProductId);
+    const billItem = entryItems.find(i => i.productId === originalProductId);
     setDeliveryMap(prev => ({
       ...prev,
       [originalProductId]: [
-        ...prev[originalProductId],
+        ...(prev[originalProductId] || []),
         {
           rowId: uid(),
           deliveredProductId: originalProductId,
@@ -106,14 +107,14 @@ export default function MarkCompleteModal({ entry, onClose, onSuccess, editMode 
   const removeRow = (originalProductId, rowId) => {
     setDeliveryMap(prev => ({
       ...prev,
-      [originalProductId]: prev[originalProductId].filter(r => r.rowId !== rowId)
+      [originalProductId]: (prev[originalProductId] || []).filter(r => r.rowId !== rowId)
     }));
   };
 
   const updateRow = (originalProductId, rowId, field, value) => {
     setDeliveryMap(prev => ({
       ...prev,
-      [originalProductId]: prev[originalProductId].map(r =>
+      [originalProductId]: (prev[originalProductId] || []).map(r =>
         r.rowId === rowId ? { ...r, [field]: value } : r
       )
     }));
@@ -123,7 +124,7 @@ export default function MarkCompleteModal({ entry, onClose, onSuccess, editMode 
     const product = allProducts.find(p => p.id === newProductId);
     setDeliveryMap(prev => ({
       ...prev,
-      [originalProductId]: prev[originalProductId].map(r =>
+      [originalProductId]: (prev[originalProductId] || []).map(r =>
         r.rowId === rowId
           ? { ...r, deliveredProductId: newProductId, deliveredProductName: product?.name || '', unit: product?.unit || '' }
           : r
@@ -144,7 +145,7 @@ export default function MarkCompleteModal({ entry, onClose, onSuccess, editMode 
     // Flatten deliveryMap into verificationItems array
     const verificationItems = [];
     for (const [originalProductId, rows] of Object.entries(deliveryMap)) {
-      const billItem = entry.items.find(i => i.productId === originalProductId);
+      const billItem = entryItems.find(i => i.productId === originalProductId);
       const firstRow = rows[0] || {};
       for (const row of rows) {
         const product = allProducts.find(p => p.id === row.deliveredProductId);
@@ -231,7 +232,10 @@ export default function MarkCompleteModal({ entry, onClose, onSuccess, editMode 
                   <div key={key} className="space-y-2">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">{label}</label>
                     <div className="relative group">
-                      <Icon className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-blue-600 transition-colors" size={20} />
+                      {createElement(Icon, {
+                        className: 'absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-blue-600 transition-colors',
+                        size: 20,
+                      })}
                       <input
                         className="w-full bg-slate-50 border-2 border-transparent focus:border-blue-600 focus:bg-white rounded-2xl pl-14 pr-6 py-4 font-black text-slate-900 transition-all outline-none"
                         placeholder={placeholder}
@@ -271,9 +275,12 @@ export default function MarkCompleteModal({ entry, onClose, onSuccess, editMode 
 
               {/* One row-group per bill item */}
               <div className="space-y-4">
-                {entry.items.map((billItem) => {
+                {entryItems.length === 0 ? (
+                  <div className="p-8 rounded-2xl border border-amber-100 bg-amber-50 text-amber-700 font-bold text-sm">
+                    No bill items were found for this entry. Reopen the entry after refreshing data, or edit the bill items first.
+                  </div>
+                ) : entryItems.map((billItem) => {
                   const rows = deliveryMap[billItem.productId] || [];
-                  const origProduct = allProducts.find(p => p.id === billItem.productId);
                   return (
                     <div
                       key={billItem.productId}
@@ -302,7 +309,7 @@ export default function MarkCompleteModal({ entry, onClose, onSuccess, editMode 
 
                       {/* RIGHT — delivery rows (editable, stacked) */}
                       <div className="flex flex-col divide-y divide-slate-50 bg-white">
-                        {rows.map((row, rowIdx) => {
+                        {rows.map((row) => {
                           const product = allProducts.find(p => p.id === row.deliveredProductId);
                           const isAlternate = product && product.alternateUnit === row.unit;
                           const factor = isAlternate ? parseFloat(product.conversionFactor) || 1.0 : 1.0;

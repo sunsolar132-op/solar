@@ -14,6 +14,7 @@ export default function FirmDashboard() {
   const { addToast } = useToast();
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [trackOrderId, setTrackOrderId] = useState(null);
   const [completeEntry, setCompleteEntry] = useState(null);
@@ -21,22 +22,13 @@ export default function FirmDashboard() {
 
   const fetchStats = async () => {
     setLoading(true);
+    setError(null);
     try {
-      console.log('Fetching dashboard stats from: /firm/dashboard-stats');
       const data = await api.get('/firm/dashboard-stats');
-      console.log('Stats received:', data);
       setStats(data);
     } catch (err) {
-      console.error('Dashboard Stats Error:', err);
+      setError(err.message || 'Failed to load dashboard');
       addToast(err.message, 'error');
-
-      // Attempt health check to verify backend connectivity
-      try {
-        const health = await api.get('/firm/test-health');
-        console.log('Firm Health Check:', health);
-      } catch (hErr) {
-        console.error('Firm Health Check FAILED:', hErr);
-      }
     } finally {
       setLoading(false);
     }
@@ -58,6 +50,25 @@ export default function FirmDashboard() {
         <div className="flex flex-col items-center gap-6">
           <div className="w-16 h-16 border-4 border-blue-50 border-t-blue-600 rounded-full animate-spin" />
           <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] animate-pulse">Initializing Dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error && !stats) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <div className="flex flex-col items-center gap-6 text-center max-w-sm">
+          <div className="w-16 h-16 bg-red-50 rounded-3xl flex items-center justify-center text-red-500">
+            <AlertTriangle size={32} />
+          </div>
+          <div>
+            <h3 className="text-xl font-black text-slate-900">Dashboard Unavailable</h3>
+            <p className="text-sm text-slate-400 mt-2">{error}</p>
+          </div>
+          <button onClick={fetchStats} className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-blue-700 transition-all">
+            <RefreshCcw size={16} /> Retry
+          </button>
         </div>
       </div>
     );

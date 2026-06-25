@@ -1,7 +1,8 @@
 import { BrowserRouter as Router, Routes, Route, Navigate, Link, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
-import { ShieldAlert, LogIn, RefreshCcw } from 'lucide-react';
+import { ShieldAlert, LogIn, RefreshCcw, AlertTriangle } from 'lucide-react';
+import { Component } from 'react';
 import Login from './Login';
 import DashboardLayout from './layouts/DashboardLayout';
 
@@ -27,6 +28,43 @@ import AgentDashboard from './pages/agent/AgentDashboard';
 import AgentEntryForm from './pages/agent/AgentEntryForm';
 import AgentStatement from './pages/agent/AgentStatement';
 import AgentLiveStock from './pages/agent/AgentLiveStock';
+
+/**
+ * ── Global Error Boundary ── catches any uncaught render errors
+ */
+class ErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="h-screen w-full flex items-center justify-center bg-slate-50 p-6">
+          <div className="w-full max-w-md bg-white rounded-[3rem] shadow-2xl shadow-slate-200/50 p-12 text-center border border-slate-100">
+            <div className="w-20 h-20 bg-red-50 rounded-3xl flex items-center justify-center text-red-500 mx-auto mb-8 shadow-lg shadow-red-100/50">
+              <AlertTriangle size={40} strokeWidth={2.5} />
+            </div>
+            <h1 className="text-3xl font-black text-slate-900 tracking-tighter mb-3">Something Crashed</h1>
+            <p className="text-slate-400 font-medium text-sm mb-8 leading-relaxed">
+              {this.state.error?.message || 'An unexpected error occurred. The page needs to be reloaded.'}
+            </p>
+            <button
+              onClick={() => window.location.reload()}
+              className="flex items-center justify-center gap-3 w-full py-4 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-blue-700 transition-all shadow-xl shadow-blue-100"
+            >
+              <RefreshCcw size={18} /> Reload App
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 /**
  * ── Forbidden component for multi-tab role changes ──
@@ -160,7 +198,9 @@ export default function App() {
     <AuthProvider>
       <ToastProvider>
         <Router>
-          <AppRoutes />
+          <ErrorBoundary>
+            <AppRoutes />
+          </ErrorBoundary>
         </Router>
       </ToastProvider>
     </AuthProvider>

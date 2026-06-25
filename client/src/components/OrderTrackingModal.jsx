@@ -9,16 +9,18 @@ export default function OrderTrackingModal({ orderId, onClose }) {
 
   useEffect(() => {
     if (!orderId) return;
+    // Reset state on every new orderId so stale data/error doesn't flash
+    setData(null);
+    setError(null);
     setLoading(true);
     api.get(`/firm/track-order/${orderId}`)
       .then(res => {
         setData(res);
-        setLoading(false);
       })
       .catch(err => {
         setError(err.message || 'Order not found');
-        setLoading(false);
-      });
+      })
+      .finally(() => setLoading(false));
   }, [orderId]);
 
   if (!orderId) return null;
@@ -68,15 +70,15 @@ export default function OrderTrackingModal({ orderId, onClose }) {
               <div className="bg-slate-50 rounded-3xl p-6 border border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-6">
                 <div>
                   <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Current Record</div>
-                  <div className="text-xl font-black text-slate-900">{data.order.billNo || data.order.soId || data.order.id}</div>
+                  <div className="text-xl font-black text-slate-900">{data?.order?.billNo || data?.order?.soId || data?.order?.id || '—'}</div>
                   <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-100 text-blue-700 text-[10px] font-black uppercase tracking-widest mt-2">
-                    {data.order.type}
+                    {data?.order?.type || '—'}
                   </div>
                 </div>
                 <div className="text-right">
                   <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Status</div>
-                  <div className={`text-lg font-black ${data.order.status === 'Converted' ? 'text-orange-500' : data.order.deliveryStatus === 'Completed' ? 'text-emerald-500' : 'text-blue-500'}`}>
-                    {data.order.deliveryStatus || data.order.status || 'Active'}
+                  <div className={`text-lg font-black ${data?.order?.status === 'Converted' ? 'text-orange-500' : data?.order?.deliveryStatus === 'Completed' ? 'text-emerald-500' : 'text-blue-500'}`}>
+                    {data?.order?.deliveryStatus || data?.order?.status || 'Active'}
                   </div>
                 </div>
               </div>
@@ -99,11 +101,11 @@ export default function OrderTrackingModal({ orderId, onClose }) {
                     <div className="mt-4 flex flex-wrap gap-4">
                       <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-100">
                         <Clock size={12} className="text-slate-400" />
-                        {new Date(data.order.createdAt).toLocaleString()}
+                        {data?.order?.createdAt ? new Date(data.order.createdAt).toLocaleString() : '—'}
                       </div>
                       <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-100">
                         <User size={12} className="text-slate-400" />
-                        {data.order.agentName || 'Firm Admin'}
+                        {data?.order?.agentName || 'Firm Admin'}
                       </div>
                     </div>
                   </div>
@@ -131,7 +133,7 @@ export default function OrderTrackingModal({ orderId, onClose }) {
                 )}
 
                 {/* Event: Conversions (Next Steps) */}
-                {data.conversions.map((conv, idx) => (
+                {(data?.conversions || []).map((conv, idx) => (
                   <div key={idx} className="relative">
                     <div className="absolute -left-[1.875rem] top-1 w-6 h-6 rounded-full bg-white border-2 border-purple-500 flex items-center justify-center z-10 shadow-sm">
                       <ArrowRight size={12} className="text-purple-500" />
@@ -156,7 +158,7 @@ export default function OrderTrackingModal({ orderId, onClose }) {
                 ))}
 
                 {/* Event: Delivery */}
-                {(data.order.deliveryStatus === 'Completed' || data.order.completedAt) && (
+                {(data?.order?.deliveryStatus === 'Completed' || data?.order?.completedAt) && (
                   <div className="relative">
                     <div className="absolute -left-[1.875rem] top-1 w-6 h-6 rounded-full bg-white border-2 border-emerald-500 flex items-center justify-center z-10 shadow-sm">
                       <CheckCircle2 size={12} className="text-emerald-500" />
@@ -168,9 +170,9 @@ export default function OrderTrackingModal({ orderId, onClose }) {
                       </p>
                       <div className="mt-4">
                         <div className="inline-flex items-center gap-2 text-[10px] font-bold text-slate-400 bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-100">
-                          <Clock size={12} className="text-emerald-500" />
-                          {data.order.completedAt ? new Date(data.order.completedAt).toLocaleString() : 'Date not recorded'}
-                        </div>
+                           <Clock size={12} className="text-emerald-500" />
+                           {data?.order?.completedAt ? new Date(data.order.completedAt).toLocaleString() : 'Date not recorded'}
+                         </div>
                       </div>
                     </div>
                   </div>

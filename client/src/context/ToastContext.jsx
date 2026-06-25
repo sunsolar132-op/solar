@@ -1,4 +1,4 @@
-﻿import { createContext, useContext, useState, useCallback } from 'react';
+import { createContext, useContext, useState, useCallback } from 'react';
 
 const ToastContext = createContext(null);
 
@@ -31,7 +31,7 @@ export const ToastProvider = ({ children }) => {
               : t.type === 'error' ? 'linear-gradient(135deg, #ef4444, #dc2626)'
               : 'linear-gradient(135deg, #3b82f6, #2563eb)',
           }}>
-            {t.type === 'success' ? 'âœ…' : t.type === 'error' ? 'âŒ' : 'â„¹ï¸'} {t.message}
+            {t.type === 'success' ? '✅' : t.type === 'error' ? '❌' : 'ℹ️'} {t.message}
           </div>
         ))}
       </div>

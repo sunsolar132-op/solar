@@ -25,7 +25,7 @@ export default function WarehouseDashboard() {
   useEffect(() => {
     if (firms.length === 0) return;
     fetchStock(selectedFirmId, firms);
-  }, [selectedFirmId]);
+  }, [selectedFirmId, firms]);
 
   const fetchStock = async (firmId, firmList) => {
     const list = firmList || firms;
