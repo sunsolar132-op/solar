@@ -209,7 +209,7 @@ async function logEntryChanges(client, { entryId, entryType, changedById, change
   }
 }
 
-function buildFirmStockSnapshot(txRows, outwardRows, productRows) {
+function buildFirmStockSnapshot(txRows, outwardRows, productRows, adjRows = []) {
   const products = Object.fromEntries(productRows.map((row) => [row.id, row]));
   const outwardMap = {};
 
@@ -237,6 +237,20 @@ function buildFirmStockSnapshot(txRows, outwardRows, productRows) {
       physicalStock: opening,
       estimateStock: opening,
     };
+  });
+
+  // Apply quantity adjustments
+  adjRows.forEach((adj) => {
+    const s = stockMap[adj.product_id];
+    if (!s) return;
+    const qty = parseFloat(adj.qty) || 0;
+    if (adj.adjustment_type === 'ADD') {
+      s.physicalStock += qty;
+      s.estimateStock += qty;
+    } else if (adj.adjustment_type === 'REMOVE') {
+      s.physicalStock -= qty;
+      s.estimateStock -= qty;
+    }
   });
 
   const getStockEntry = (pid, pname) => {
@@ -934,7 +948,7 @@ router.post('/convert-to-sale', auth(['FIRM']), async (req, res) => {
 
 router.get('/livestock', auth(['FIRM']), async (req, res) => {
   try {
-    const [txResult, outwardResult, productResult] = await Promise.all([
+    const [txResult, outwardResult, productResult, adjResult] = await Promise.all([
       db.query(`
         SELECT t.id, t.type, t.status, t.delivery_status, bi.product_id, bi.product_name, bi.qty, bi.qty_in_standard_unit
         FROM transactions t
@@ -948,9 +962,10 @@ router.get('/livestock', auth(['FIRM']), async (req, res) => {
         LEFT JOIN firm_product_opening_stock fpos 
           ON p.id = fpos.product_id AND fpos.firm_id = $1
       `, [req.user.id]),
+      db.query('SELECT product_id, adjustment_type, qty FROM product_qty_adjustments WHERE firm_id = $1', [req.user.id]),
     ]);
 
-    res.json(buildFirmStockSnapshot(txResult.rows, outwardResult.rows, productResult.rows));
+    res.json(buildFirmStockSnapshot(txResult.rows, outwardResult.rows, productResult.rows, adjResult.rows));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -977,7 +992,7 @@ router.get('/stock-ledger', auth(['FIRM']), async (req, res) => {
 
     const firmId = req.user.id;
 
-    const [txResult, outwardResult, openingResult] = await Promise.all([
+    const [txResult, outwardResult, openingResult, adjResult] = await Promise.all([
       db.query(`
         SELECT
           t.id, t.type, t.status, t.delivery_status, t.date,
@@ -1019,6 +1034,11 @@ router.get('/stock-ledger', auth(['FIRM']), async (req, res) => {
         WHERE fpos.product_id = $1 AND fpos.firm_id = $2
         LIMIT 1
       `, [productId, firmId]),
+      db.query(`
+        SELECT id, adjustment_no, date, product_id, adjustment_type, qty, unit, reason, created_by, agent_name, created_at
+        FROM product_qty_adjustments
+        WHERE firm_id = $1 AND product_id = $2
+      `, [firmId, productId]),
     ]);
 
     const openingStockQty = parseFloat(openingResult.rows[0]?.opening_stock_qty || 0);
@@ -1054,23 +1074,51 @@ router.get('/stock-ledger', auth(['FIRM']), async (req, res) => {
       const billNo = tx.billNo || tx.soId || '—';
 
       if (tx.type === 'PURCHASE') {
-        allRows.push({ isoDate, date: tx.date, billId: tx.id, billNo, partyName: tx.partyName, type: 'PURCHASE', detailLabel: 'Purchase', qtyIn: totalBillQty, qtyOut: 0 });
+        allRows.push({ isoDate, date: tx.date, billId: tx.id, billNo, partyName: tx.partyName, type: 'PURCHASE', detailLabel: 'Purchase', qtyIn: totalBillQty, qtyOut: 0, createdAt: tx.date });
       } else if (tx.type === 'PURCHASE_RETURN') {
-        allRows.push({ isoDate, date: tx.date, billId: tx.id, billNo, partyName: tx.partyName, type: 'PURCHASE_RETURN', detailLabel: 'Purchase Return', qtyIn: 0, qtyOut: totalBillQty });
+        allRows.push({ isoDate, date: tx.date, billId: tx.id, billNo, partyName: tx.partyName, type: 'PURCHASE_RETURN', detailLabel: 'Purchase Return', qtyIn: 0, qtyOut: totalBillQty, createdAt: tx.date });
       } else if (tx.type === 'SALE_RETURN') {
-        allRows.push({ isoDate, date: tx.date, billId: tx.id, billNo, partyName: tx.partyName, type: 'SALE_RETURN', detailLabel: 'Sale Return', qtyIn: totalBillQty, qtyOut: 0 });
+        allRows.push({ isoDate, date: tx.date, billId: tx.id, billNo, partyName: tx.partyName, type: 'SALE_RETURN', detailLabel: 'Sale Return', qtyIn: totalBillQty, qtyOut: 0, createdAt: tx.date });
       } else if (tx.type === 'SALE' && tx.deliveryStatus === 'Completed') {
         const outwardQty = outwardQtyMap[tx.id] || 0;
         const saleQty = outwardQty > 0 ? outwardQty : totalBillQty;
         if (saleQty > 0) {
-          allRows.push({ isoDate, date: tx.date, billId: tx.id, billNo, partyName: tx.partyName, type: 'SALE', detailLabel: outwardQty > 0 ? 'Sale (Outward)' : 'Sale (Bill Qty)', qtyIn: 0, qtyOut: saleQty });
+          allRows.push({ isoDate, date: tx.date, billId: tx.id, billNo, partyName: tx.partyName, type: 'SALE', detailLabel: outwardQty > 0 ? 'Sale (Outward)' : 'Sale (Bill Qty)', qtyIn: 0, qtyOut: saleQty, createdAt: tx.date });
         }
       }
       // Pending SALE, SO, BOOK → excluded
     });
 
-    // Sort chronologically
-    allRows.sort((a, b) => a.isoDate.localeCompare(b.isoDate));
+    // Include quantity adjustments
+    adjResult.rows.forEach((adj) => {
+      const isoDate = toISO(adj.date);
+      const qty = parseFloat(adj.qty) || 0;
+      const isAdd = adj.adjustment_type === 'ADD';
+      const adjNo = `ADJ-${String(adj.adjustment_no).padStart(3, '0')}`;
+      allRows.push({
+        isoDate,
+        date: adj.date,
+        billId: adj.id,
+        billNo: adjNo,
+        partyName: adj.agent_name ? `Agent: ${adj.agent_name}` : 'Firm Admin',
+        type: isAdd ? 'ADJUSTMENT_ADD' : 'ADJUSTMENT_REMOVE',
+        detailLabel: isAdd ? 'Adjustment (Add)' : 'Adjustment (Remove)',
+        qtyIn: isAdd ? qty : 0,
+        qtyOut: isAdd ? 0 : qty,
+        reason: adj.reason,
+        isAdjustment: true,
+        createdAt: adj.created_at,
+      });
+    });
+
+    // Sort chronologically (by isoDate and then createdAt)
+    allRows.sort((a, b) => {
+      const dateCmp = a.isoDate.localeCompare(b.isoDate);
+      if (dateCmp !== 0) return dateCmp;
+      const tA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const tB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return tA - tB;
+    });
 
     // Compute opening balance for the period
     let openingBalance = openingStockQty;
@@ -1100,6 +1148,8 @@ router.get('/stock-ledger', auth(['FIRM']), async (req, res) => {
         qtyIn: row.qtyIn,
         qtyOut: row.qtyOut,
         balance,
+        reason: row.reason,
+        isAdjustment: row.isAdjustment,
       };
     });
 
@@ -1354,9 +1404,14 @@ router.get('/book-statement', auth(['FIRM']), async (req, res) => {
 router.get('/entries/:id/history', auth(['FIRM']), async (req, res) => {
   try {
     const { id } = req.params;
-    // Verify this entry belongs to this firm
-    const check = await db.query('SELECT id FROM transactions WHERE id = $1 AND firm_id = $2 LIMIT 1', [id, req.user.id]);
-    if (!check.rows.length) return res.status(403).json({ error: 'Access denied' });
+    // Verify this entry belongs to this firm (can be transaction or adjustment)
+    const checkTx = await db.query('SELECT id FROM transactions WHERE id = $1 AND firm_id = $2 LIMIT 1', [id, req.user.id]);
+    let hasAccess = checkTx.rows.length > 0;
+    if (!hasAccess) {
+      const checkAdj = await db.query('SELECT id FROM product_qty_adjustments WHERE id = $1 AND firm_id = $2 LIMIT 1', [id, req.user.id]);
+      hasAccess = checkAdj.rows.length > 0;
+    }
+    if (!hasAccess) return res.status(403).json({ error: 'Access denied' });
 
     const result = await db.query(
       `SELECT * FROM entry_edit_logs WHERE entry_id = $1 ORDER BY changed_at DESC`,
@@ -1374,6 +1429,174 @@ router.get('/entries/:id/history', auth(['FIRM']), async (req, res) => {
       changedByName: r.changed_by_name,
       changedAt: r.changed_at,
     })));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── CRUD for Product Qty Adjustments ─────────────────────────────────────────
+
+router.get('/adjustments', auth(['FIRM']), async (req, res) => {
+  try {
+    const { productId } = req.query;
+    const firmId = req.user.id;
+    let queryText = `
+      SELECT a.*, p.name as product_name
+      FROM product_qty_adjustments a
+      JOIN products p ON a.product_id = p.id
+      WHERE a.firm_id = $1
+    `;
+    const params = [firmId];
+    if (productId) {
+      queryText += ' AND a.product_id = $2';
+      params.push(productId);
+    }
+    queryText += ' ORDER BY a.date DESC, a.created_at DESC';
+    const result = await db.query(queryText, params);
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/adjustments', auth(['FIRM']), async (req, res) => {
+  try {
+    const { date, productId, adjustmentType, qty, unit, reason } = req.body;
+    const firmId = req.user.id;
+    const createdBy = req.user.id;
+    const agentName = null;
+
+    if (!date || !productId || !adjustmentType || !qty || !unit) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+    if (parseFloat(qty) <= 0) {
+      return res.status(400).json({ error: 'Quantity must be greater than 0' });
+    }
+    if (!['ADD', 'REMOVE'].includes(adjustmentType)) {
+      return res.status(400).json({ error: 'Invalid adjustment type' });
+    }
+
+    const result = await db.query(
+      `INSERT INTO product_qty_adjustments (firm_id, product_id, date, adjustment_type, qty, unit, reason, created_by, agent_name)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       RETURNING *`,
+      [firmId, productId, date, adjustmentType, qty, unit, reason || '', createdBy, agentName]
+    );
+    const newAdj = result.rows[0];
+
+    // Log creation
+    await db.query(
+      `INSERT INTO entry_edit_logs (entry_id, entry_type, field_name, old_value, new_value, changed_by_id, changed_by_role, changed_by_name)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [newAdj.id, 'ADJUSTMENT', 'Entry Created', null, 'Created', req.user.id, req.user.role, req.user.name]
+    );
+
+    res.status(201).json(newAdj);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.put('/adjustments/:id', auth(['FIRM']), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { date, productId, adjustmentType, qty, unit, reason } = req.body;
+    const firmId = req.user.id;
+
+    if (!date || !productId || !adjustmentType || !qty || !unit) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+    if (parseFloat(qty) <= 0) {
+      return res.status(400).json({ error: 'Quantity must be greater than 0' });
+    }
+    if (!['ADD', 'REMOVE'].includes(adjustmentType)) {
+      return res.status(400).json({ error: 'Invalid adjustment type' });
+    }
+
+    // Check ownership
+    const oldResult = await db.query(
+      'SELECT * FROM product_qty_adjustments WHERE id = $1 AND firm_id = $2',
+      [id, firmId]
+    );
+    if (oldResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Adjustment not found or access denied' });
+    }
+    const oldAdj = oldResult.rows[0];
+
+    const result = await db.query(
+      `UPDATE product_qty_adjustments
+       SET date = $1, product_id = $2, adjustment_type = $3, qty = $4, unit = $5, reason = $6, updated_at = NOW()
+       WHERE id = $7 AND firm_id = $8
+       RETURNING *`,
+      [date, productId, adjustmentType, qty, unit, reason || '', id, firmId]
+    );
+    const newAdj = result.rows[0];
+
+    // Log changed fields
+    const logs = [];
+    const fieldMap = [
+      ['date', 'Date', oldAdj.date ? new Date(oldAdj.date).toISOString().split('T')[0] : '', date],
+      ['adjustment_type', 'Adjustment Type', oldAdj.adjustment_type, adjustmentType],
+      ['qty', 'Qty', String(oldAdj.qty), String(qty)],
+      ['unit', 'Unit', oldAdj.unit, unit],
+      ['reason', 'Reason', oldAdj.reason, reason],
+    ];
+    for (const [, label, oldVal, newVal] of fieldMap) {
+      if ((oldVal || '').toString().trim() !== (newVal || '').toString().trim()) {
+        logs.push([
+          id,
+          'ADJUSTMENT',
+          label,
+          oldVal ? String(oldVal).trim() : null,
+          newVal ? String(newVal).trim() : null,
+          req.user.id,
+          req.user.role,
+          req.user.name
+        ]);
+      }
+    }
+
+    for (const log of logs) {
+      await db.query(
+        `INSERT INTO entry_edit_logs (entry_id, entry_type, field_name, old_value, new_value, changed_by_id, changed_by_role, changed_by_name)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        log
+      );
+    }
+
+    res.json(newAdj);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.delete('/adjustments/:id', auth(['FIRM']), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const firmId = req.user.id;
+
+    // Check ownership
+    const check = await db.query(
+      'SELECT id FROM product_qty_adjustments WHERE id = $1 AND firm_id = $2',
+      [id, firmId]
+    );
+    if (check.rows.length === 0) {
+      return res.status(404).json({ error: 'Adjustment not found or access denied' });
+    }
+
+    await db.query(
+      'DELETE FROM product_qty_adjustments WHERE id = $1 AND firm_id = $2',
+      [id, firmId]
+    );
+
+    // Log deletion
+    await db.query(
+      `INSERT INTO entry_edit_logs (entry_id, entry_type, field_name, old_value, new_value, changed_by_id, changed_by_role, changed_by_name)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [id, 'ADJUSTMENT', 'Entry Deleted', 'Adjustment deleted', null, req.user.id, req.user.role, req.user.name]
+    );
+
+    res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

@@ -3,6 +3,13 @@
  */
 export const formatDate = (dateStr) => {
   if (!dateStr) return '';
+  // Extract date portion if it is an ISO string with time
+  if (dateStr.includes('T')) {
+    dateStr = dateStr.split('T')[0];
+  } else if (dateStr.includes(' ')) {
+    dateStr = dateStr.split(' ')[0];
+  }
+
   // If it's already in DD/MM/YY format (length 8), return it
   if (dateStr.includes('/') && dateStr.length <= 8) return dateStr;
   

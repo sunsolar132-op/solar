@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { Search, Calendar, Trash2, Edit2, X, Download, Hash, User, CheckCircle2, Truck, FileDown, MoreVertical, ChevronDown, ChevronUp, Package, History } from 'lucide-react';
 import * as XLSX from 'xlsx';
@@ -15,6 +16,7 @@ import { printBillAsGSTInvoice } from '../../utils/BillPrintUtil';
 
 export default function StatementPage({ type: initialType, title, showAgent }) {
   const [openDropdown, setOpenDropdown] = useState(null);
+  const [dropdownPos, setDropdownPos] = useState({ top: 0, right: 0, openUp: false });
   const [expandedRow, setExpandedRow] = useState(null);
   const [historyEntry, setHistoryEntry] = useState(null);
   const navigate = useNavigate();
@@ -456,20 +458,37 @@ export default function StatementPage({ type: initialType, title, showAgent }) {
                           {/* 3-dot dropdown menu */}
                           <div className="relative">
                             <button
-                              onClick={() => setOpenDropdown(openDropdown === e.id ? null : e.id)}
+                              onClick={(evt) => {
+                                const rect = evt.currentTarget.getBoundingClientRect();
+                                const openUp = rect.bottom > window.innerHeight - 180;
+                                setDropdownPos({
+                                  top: openUp ? rect.top - 4 : rect.bottom + 4,
+                                  right: window.innerWidth - rect.right,
+                                  openUp
+                                });
+                                setOpenDropdown(openDropdown === e.id ? null : e.id);
+                              }}
                               className="w-9 h-9 flex items-center justify-center rounded-xl bg-slate-50 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-all"
                               title="More actions"
                             >
                               <MoreVertical size={16} />
                             </button>
-                            {openDropdown === e.id && (
+                            {openDropdown === e.id && createPortal(
                               <>
                                 {/* Backdrop to close on outside click */}
                                 <div
-                                  className="fixed inset-0 z-10"
+                                  className="fixed inset-0 z-40"
                                   onClick={() => setOpenDropdown(null)}
                                 />
-                                <div className="absolute right-0 mt-1 w-44 bg-white border border-slate-100 rounded-xl shadow-lg z-20 overflow-hidden">
+                                <div
+                                  style={{
+                                    position: 'fixed',
+                                    top: dropdownPos.top,
+                                    right: dropdownPos.right,
+                                    transform: dropdownPos.openUp ? 'translateY(-100%)' : 'none',
+                                  }}
+                                  className="w-44 bg-white border border-slate-100 rounded-xl shadow-lg z-50 overflow-hidden animate-in fade-in slide-in-from-top-1 duration-100"
+                                >
                                   {initialType === 'SALE' && (
                                     <button
                                       onClick={() => { setOpenDropdown(null); handlePrintBill(e); }}
@@ -510,7 +529,8 @@ export default function StatementPage({ type: initialType, title, showAgent }) {
                                     History
                                   </button>
                                 </div>
-                              </>
+                              </>,
+                              document.body
                             )}
                           </div>
                         </div>

@@ -529,7 +529,7 @@ router.get('/dashboard', auth(['AGENT']), async (req, res) => {
   }
 });
 
-function buildFirmStockSnapshot(txRows, outwardRows, productRows) {
+function buildFirmStockSnapshot(txRows, outwardRows, productRows, adjRows = []) {
   const products = Object.fromEntries(productRows.map((row) => [row.id, row]));
   const outwardMap = {};
 
@@ -557,6 +557,20 @@ function buildFirmStockSnapshot(txRows, outwardRows, productRows) {
       physicalStock: opening,
       estimateStock: opening,
     };
+  });
+
+  // Apply quantity adjustments
+  adjRows.forEach((adj) => {
+    const s = stockMap[adj.product_id];
+    if (!s) return;
+    const qty = parseFloat(adj.qty) || 0;
+    if (adj.adjustment_type === 'ADD') {
+      s.physicalStock += qty;
+      s.estimateStock += qty;
+    } else if (adj.adjustment_type === 'REMOVE') {
+      s.physicalStock -= qty;
+      s.estimateStock -= qty;
+    }
   });
 
   const getStockEntry = (pid, pname) => {
@@ -678,7 +692,7 @@ function buildFirmStockSnapshot(txRows, outwardRows, productRows) {
 
 router.get('/livestock', auth(['AGENT']), async (req, res) => {
   try {
-    const [txResult, outwardResult, productResult] = await Promise.all([
+    const [txResult, outwardResult, productResult, adjResult] = await Promise.all([
       db.query(`
         SELECT t.id, t.type, t.status, t.delivery_status,
                bi.product_id, bi.product_name, bi.qty, bi.qty_in_standard_unit
@@ -693,9 +707,10 @@ router.get('/livestock', auth(['AGENT']), async (req, res) => {
         LEFT JOIN firm_product_opening_stock fpos 
           ON p.id = fpos.product_id AND fpos.firm_id = $1
       `, [req.user.firmId]),
+      db.query('SELECT product_id, adjustment_type, qty FROM product_qty_adjustments WHERE firm_id = $1', [req.user.firmId]),
     ]);
 
-    res.json(buildFirmStockSnapshot(txResult.rows, outwardResult.rows, productResult.rows));
+    res.json(buildFirmStockSnapshot(txResult.rows, outwardResult.rows, productResult.rows, adjResult.rows));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
