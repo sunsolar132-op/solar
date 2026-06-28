@@ -26,6 +26,7 @@ export default function PartyMaster() {
   const [selectedAccess, setSelectedAccess] = useState([]); // Array of IDs
   const [isLoadingAccess, setIsLoadingAccess] = useState(false);
   const [isSavingAccess, setIsSavingAccess] = useState(false);
+  const [accessSearch, setAccessSearch] = useState('');
 
   const fetchData = async () => {
     setLoading(true);
@@ -106,6 +107,7 @@ export default function PartyMaster() {
     // Prevent opening if already loading access data
     if (isLoadingAccess) return;
     setSelectedAccess([]);
+    setAccessSearch('');
     setAccessTarget({ ...party, type });
     setIsLoadingAccess(true);
     try {
@@ -417,6 +419,19 @@ export default function PartyMaster() {
               </div>
               <button onClick={() => setAccessTarget(null)} className="w-12 h-12 rounded-2xl bg-white border border-slate-100 flex items-center justify-center text-slate-300 hover:text-slate-900 transition-all shadow-sm"><X size={20} /></button>
             </div>
+
+            {/* Search inside modal */}
+            <div className="px-10 pt-6 shrink-0">
+              <div className="relative">
+                <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
+                <input
+                  className="w-full pl-12 pr-5 py-3.5 bg-slate-50 rounded-2xl border border-slate-100 outline-none focus:border-blue-400 text-sm font-bold transition-all"
+                  placeholder={accessTarget.type === 'FIRM' ? 'Search firms...' : 'Search agents...'}
+                  value={accessSearch}
+                  onChange={e => setAccessSearch(e.target.value)}
+                />
+              </div>
+            </div>
             
             <div className="p-10 overflow-y-auto scrollbar-hide space-y-3">
               {isLoadingAccess ? (
@@ -425,7 +440,9 @@ export default function PartyMaster() {
                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Fetching Access Data...</p>
                 </div>
               ) : accessTarget.type === 'FIRM' ? (
-                firms.map(f => {
+                firms
+                  .filter(f => f.name.toLowerCase().includes(accessSearch.toLowerCase()) || (f.email || '').toLowerCase().includes(accessSearch.toLowerCase()))
+                  .map(f => {
                   const isSelected = selectedAccess.includes(f.id);
                   return (
                     <div 
@@ -449,7 +466,9 @@ export default function PartyMaster() {
                   );
                 })
               ) : (
-                allAgents.map(a => {
+                allAgents
+                  .filter(a => a.name.toLowerCase().includes(accessSearch.toLowerCase()) || (a.firmName || '').toLowerCase().includes(accessSearch.toLowerCase()) || (a.email || '').toLowerCase().includes(accessSearch.toLowerCase()))
+                  .map(a => {
                   const isSelected = selectedAccess.includes(a.id);
                   return (
                     <div 
